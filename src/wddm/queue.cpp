@@ -89,6 +89,7 @@ hsa_status_t WDDMQueue::SwsInit(void) {
     }
 
     queue_mem = gpu_mem->GetGpuMemoryHandle();
+    queue_addr = gpu_mem->GpuAddress();
     queue = gpu_mem->GetAllocationHandle(0);
   }
 
@@ -96,6 +97,13 @@ hsa_status_t WDDMQueue::SwsInit(void) {
 }
 
 hsa_status_t WDDMQueue::SwsFini(void) {
+  if (queue_mem) {
+    delete GpuMemory::Convert(queue_mem);
+    queue_mem = 0;
+    queue_addr = 0;
+    queue = 0;
+  }
+
   device->DestroySyncobj(syncobj);
 
   return HSA_STATUS_SUCCESS;
@@ -276,6 +284,7 @@ ComputeQueue::ComputeQueue(WDDMDevice *device,
   amd_queue_ = reinterpret_cast<amd_queue_v2_t*>(gpu_mem->GpuAddress());
 
   amd_queue_rocr_ = (amd_queue_v2_t*)((char*)ring_rptr - offsetof(amd_queue_v2_t, read_dispatch_id));
+  std::memcpy(amd_queue_, amd_queue_rocr_, sizeof(*amd_queue_));
   aql_to_pm4_thread_ = std::thread(AqlToPm4Thread, this);
 }
 
@@ -661,6 +670,34 @@ ComputeQueue::KernelDispatchAqlToPm4(char *cpu, hsa_kernel_dispatch_packet_t *pa
 
   assert(packet->private_segment_size >= kernel_object->workitem_private_segment_byte_size);
   UpdateScratch(packet->private_segment_size, wave32);
+  if (scratch_size_ == 0) {
+    std::memcpy(amd_queue_->scratch_resource_descriptor,
+                amd_queue_rocr_->scratch_resource_descriptor,
+                sizeof(amd_queue_->scratch_resource_descriptor));
+    std::memcpy(amd_queue_->alt_scratch_resource_descriptor,
+                amd_queue_rocr_->alt_scratch_resource_descriptor,
+                sizeof(amd_queue_->alt_scratch_resource_descriptor));
+    amd_queue_->scratch_backing_memory_location =
+        amd_queue_rocr_->scratch_backing_memory_location;
+    amd_queue_->scratch_backing_memory_byte_size =
+        amd_queue_rocr_->scratch_backing_memory_byte_size;
+    amd_queue_->scratch_wave64_lane_byte_size =
+        amd_queue_rocr_->scratch_wave64_lane_byte_size;
+    amd_queue_->scratch_max_use_index = amd_queue_rocr_->scratch_max_use_index;
+    amd_queue_->alt_scratch_backing_memory_location =
+        amd_queue_rocr_->alt_scratch_backing_memory_location;
+    amd_queue_->alt_scratch_dispatch_limit_x =
+        amd_queue_rocr_->alt_scratch_dispatch_limit_x;
+    amd_queue_->alt_scratch_dispatch_limit_y =
+        amd_queue_rocr_->alt_scratch_dispatch_limit_y;
+    amd_queue_->alt_scratch_dispatch_limit_z =
+        amd_queue_rocr_->alt_scratch_dispatch_limit_z;
+    amd_queue_->alt_scratch_wave64_lane_byte_size =
+        amd_queue_rocr_->alt_scratch_wave64_lane_byte_size;
+    amd_queue_->alt_compute_tmpring_size =
+        amd_queue_rocr_->alt_compute_tmpring_size;
+    amd_queue_->compute_tmpring_size = amd_queue_rocr_->compute_tmpring_size;
+  }
 
   amd_signal_t *signal = (amd_signal_t *)packet->completion_signal.handle;
 

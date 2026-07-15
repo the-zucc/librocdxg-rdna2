@@ -1,4 +1,5 @@
 #include "shared/include/utils.h"
+#include "shared/include/adapter_policy.h"
 
 #include <dlfcn.h>
 
@@ -138,6 +139,27 @@ std::once_flag g_merged_gfxip_once;
 
 void InitMergedGfxip() {
   g_merged_gfxip.assign(kGfxipTable, kGfxipTable + kGfxipTableSize);
+
+  // The thunk proxy resolves gfx IP through LookupGfxipEntry after Platform
+  // enumeration. Add the known RDNA2 entries here only when the user opted in,
+  // so both allowlist stages make the same decision.
+  const bool enable_rdna2 = adapter_policy::HasValidGfxOverrideValue(
+                                std::getenv("HSA_OVERRIDE_GFX_VERSION")) ||
+                            adapter_policy::IsEnabledValue(std::getenv(
+                                "LIBROCDXG_ENABLE_UNSUPPORTED_ADAPTERS"));
+  if (enable_rdna2) {
+    for (const auto &fallback :
+         adapter_policy::kKnownAdapterInfoFallbacks) {
+      if (FindGfxipEntry(g_merged_gfxip, fallback.device_id) != nullptr)
+        continue;
+
+      g_merged_gfxip.push_back(
+          {static_cast<uint16_t>(fallback.device_id),
+           static_cast<uint8_t>(fallback.major),
+           static_cast<uint8_t>(fallback.minor),
+           static_cast<uint8_t>(fallback.stepping)});
+    }
+  }
 
   // To disable loading user-supplied IDs from dids.conf, return here.
   // if (std::getenv("ROCDXG_DISABLE_DIDS_CONF"))

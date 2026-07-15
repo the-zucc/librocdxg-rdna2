@@ -185,6 +185,10 @@ size_t CmdUtil::BuildDispatch(
   struct DispatchInfo *pInfo,
   void                *pBuffer) {
   DispatchTemplate dispatch = {0};
+  const auto workgroup_count = [](uint32_t grid,
+                                  uint16_t workgroup) -> uint32_t {
+    return workgroup ? (grid + workgroup - 1) / workgroup : 0;
+  };
 
   GenerateSetShRegHeader(&dispatch.dimension_regs, mmCOMPUTE_NUM_THREAD_X);
   dispatch.dimension_regs.compute_num_thread_x = pInfo->pPacket->workgroup_size_x;
@@ -275,6 +279,27 @@ size_t CmdUtil::BuildDispatch(
 		       AMD_KERNEL_CODE_PROPERTIES_ENABLE_SGPR_PRIVATE_SEGMENT_SIZE)) {
     dispatch.compute_user_data_regs.compute_user_data[sgpr_no++] =
       pInfo->scratchSizePerWave / (pInfo->wave32 ? 32 : 64);
+  }
+  if (AMD_HSA_BITS_GET(
+          pInfo->pKernelObject->kernel_code_properties,
+          AMD_KERNEL_CODE_PROPERTIES_ENABLE_SGPR_GRID_WORKGROUP_COUNT_X)) {
+    dispatch.compute_user_data_regs.compute_user_data[sgpr_no++] =
+        workgroup_count(pInfo->pPacket->grid_size_x,
+                        pInfo->pPacket->workgroup_size_x);
+  }
+  if (AMD_HSA_BITS_GET(
+          pInfo->pKernelObject->kernel_code_properties,
+          AMD_KERNEL_CODE_PROPERTIES_ENABLE_SGPR_GRID_WORKGROUP_COUNT_Y)) {
+    dispatch.compute_user_data_regs.compute_user_data[sgpr_no++] =
+        workgroup_count(pInfo->pPacket->grid_size_y,
+                        pInfo->pPacket->workgroup_size_y);
+  }
+  if (AMD_HSA_BITS_GET(
+          pInfo->pKernelObject->kernel_code_properties,
+          AMD_KERNEL_CODE_PROPERTIES_ENABLE_SGPR_GRID_WORKGROUP_COUNT_Z)) {
+    dispatch.compute_user_data_regs.compute_user_data[sgpr_no++] =
+        workgroup_count(pInfo->pPacket->grid_size_z,
+                        pInfo->pPacket->workgroup_size_z);
   }
 
   GenerateCmdHeader(&dispatch.dispatch_direct, IT_DISPATCH_DIRECT);

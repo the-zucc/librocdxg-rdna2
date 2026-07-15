@@ -44,12 +44,15 @@
 #define _WSL_INC_WDDM_DEVICE_H_
 
 #include <cassert>
+#include <cstdlib>
 #include <ntstatus.h>
+#include <strings.h>
 
 #include <atomic>
 #include <memory>
 
 #include "shared/include/d3dkmt_types.h"
+#include "shared/include/adapter_policy.h"
 #include "shared/include/device.h"
 #include "shared/include/thunk_proxy/thunk_proxy.h"
 #include "impl/wddm/va_mgr.h"
@@ -83,9 +86,30 @@ public:
   Device *SharedDevice() const { return shared_dev_; }
 
   int NodeId() const { return node_id_; }
-  int Major() { return shared_dev_->Major(); }
-  int Minor() { return shared_dev_->Minor(); }
-  int Stepping() { return shared_dev_->Stepping(); }
+  int Major() {
+    uint32_t major = 0;
+    return adapter_policy::ParseGfxOverrideValue(
+               std::getenv("HSA_OVERRIDE_GFX_VERSION"), &major, nullptr,
+               nullptr)
+               ? static_cast<int>(major)
+               : shared_dev_->Major();
+  }
+  int Minor() {
+    uint32_t minor = 0;
+    return adapter_policy::ParseGfxOverrideValue(
+               std::getenv("HSA_OVERRIDE_GFX_VERSION"), nullptr, &minor,
+               nullptr)
+               ? static_cast<int>(minor)
+               : shared_dev_->Minor();
+  }
+  int Stepping() {
+    uint32_t stepping = 0;
+    return adapter_policy::ParseGfxOverrideValue(
+               std::getenv("HSA_OVERRIDE_GFX_VERSION"), nullptr, nullptr,
+               &stepping)
+               ? static_cast<int>(stepping)
+               : shared_dev_->Stepping();
+  }
   bool IsDgpu() { return shared_dev_->IsDgpu(); }
   const char *ProductName() { return shared_dev_->ProductName(); }
   uint64_t Uuid() { return shared_dev_->Uuid(); }
@@ -175,7 +199,13 @@ public:
 
   // Both legacy HWS and stage 1 HWS use KMD to alloc use queue memory,
   // return false by default
-  bool AllocUserQueueMemFromUMD(void) const { return false; }
+  bool AllocUserQueueMemFromUMD(void) const {
+    const char *value =
+        std::getenv("LIBROCDXG_ALLOC_USER_QUEUE_FROM_UMD");
+    return value &&
+           (!strcasecmp(value, "1") || !strcasecmp(value, "true") ||
+            !strcasecmp(value, "yes") || !strcasecmp(value, "on"));
+  }
 
   bool IsHwsEnabled(int engine) {
     return shared_dev_->IsHwsEnabled(engine);

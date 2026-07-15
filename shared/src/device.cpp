@@ -1,4 +1,5 @@
 #include "shared/include/thunks.h"
+#include "shared/include/adapter_policy.h"
 #include "shared/include/device.h"
 #include "shared/include/lda_chain.h"
 #include "shared/include/platform.h"
@@ -371,16 +372,41 @@ bool Device::IsGpuTimeoutDisabled(int engine) const {
   return device_ctx_->IsGpuTimeoutDisabled(engine);
 }
 
-int Device::Major() const { return device_ctx_->Major(); }
-int Device::Minor() const { return device_ctx_->Minor(); }
-int Device::Stepping() const { return device_ctx_->Stepping(); }
+int Device::Major() const {
+  const auto *fallback =
+      adapter_policy::FindAdapterInfoFallback(DeviceId());
+  return fallback ? adapter_policy::BackfillIfZero(device_ctx_->Major(),
+                                                    fallback->major)
+                  : device_ctx_->Major();
+}
+int Device::Minor() const {
+  const auto *fallback =
+      adapter_policy::FindAdapterInfoFallback(DeviceId());
+  return fallback ? adapter_policy::BackfillIfZero(device_ctx_->Minor(),
+                                                    fallback->minor)
+                  : device_ctx_->Minor();
+}
+int Device::Stepping() const {
+  const auto *fallback =
+      adapter_policy::FindAdapterInfoFallback(DeviceId());
+  return fallback ? adapter_policy::BackfillIfZero(device_ctx_->Stepping(),
+                                                    fallback->stepping)
+                  : device_ctx_->Stepping();
+}
 bool Device::IsDgpu() const { return device_ctx_->IsDgpu(); }
 const char *Device::ProductName() const { return device_ctx_->ProductName(); }
 uint64_t Device::Uuid() const { return device_ctx_->Uuid(); }
 uint32_t Device::Family() const { return device_ctx_->Family(); }
 uint32_t Device::DeviceId() const { return device_ctx_->DeviceId(); }
 uint32_t Device::WavefrontSize() const { return device_ctx_->WavefrontSize(); }
-uint32_t Device::ComputeUnitCount() const { return device_ctx_->ComputeUnitCount(); }
+uint32_t Device::ComputeUnitCount() const {
+  const auto *fallback =
+      adapter_policy::FindAdapterInfoFallback(DeviceId());
+  return fallback
+             ? adapter_policy::BackfillIfZero(device_ctx_->ComputeUnitCount(),
+                                               fallback->compute_unit_count)
+             : device_ctx_->ComputeUnitCount();
+}
 uint32_t Device::MaxEngineClockMhz() const { return device_ctx_->MaxEngineClockMhz(); }
 uint32_t Device::WatchPointsNum() const { return device_ctx_->WatchPointsNum(); }
 uint32_t Device::PciBusAddr() const { return device_ctx_->PciBusAddr(); }

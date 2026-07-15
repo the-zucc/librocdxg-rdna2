@@ -45,6 +45,8 @@ set ( ROCDXG_VERSION "${PACKAGE_VERSION}" )
 project ( ${ROCDXG_TARGET} VERSION ${ROCDXG_VERSION} )
 # Project/version initialized; expose version to code via target defs below
 
+option(BUILD_TESTING "Build the librocdxg test suite" OFF)
+
 # Optionally, build ROCDXG with ccache.
 set(ROCM_CCACHE_BUILD OFF CACHE BOOL "Set to ON for a ccache enabled build")
 if (ROCM_CCACHE_BUILD)
@@ -167,6 +169,11 @@ target_compile_definitions(${ROCDXG_TARGET} PRIVATE ROCDXG_VERSION="${ROCDXG_VER
 
 add_subdirectory(shared)
 target_link_libraries(${ROCDXG_TARGET} PRIVATE thunk_proxy dxg_shared)
+
+if(BUILD_TESTING)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
 
 set_property(TARGET ${ROCDXG_TARGET} PROPERTY LINK_FLAGS ${ROCDXG_LINK_FLAGS})
 

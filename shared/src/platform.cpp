@@ -41,6 +41,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "shared/include/constants.h"
+#include "shared/include/adapter_policy.h"
 #include "shared/include/thunks.h"
 #include "shared/include/platform.h"
 #include "shared/include/device.h"
@@ -48,6 +49,7 @@
 #include "shared/include/utils.h"
 #include "shared/include/thunk_proxy/thunk_proxy.h"
 #include <memory>
+#include <cstdlib>
 #include <vector>
 
 namespace wsl {
@@ -128,6 +130,11 @@ ErrorCode Platform::queryLinkedDevicesInLdaChain(
   auto code = ErrorCode::Success;
 
   constexpr u32 intelVendorId = 0x8086;
+  const bool hasGfxOverride =
+      adapter_policy::HasValidGfxOverrideValue(
+          std::getenv("HSA_OVERRIDE_GFX_VERSION"));
+  const bool enableUnsupportedAdapters = adapter_policy::IsEnabledValue(
+      std::getenv("LIBROCDXG_ENABLE_UNSUPPORTED_ADAPTERS"));
   D3DKMT_PHYSICAL_ADAPTER_COUNT countInfo{};
   d3dthunk::QueryAdapterInfoArgs queryInfo{};
 
@@ -160,8 +167,12 @@ ErrorCode Platform::queryLinkedDevicesInLdaChain(
 
     if ((vendorId == AMD_VENDOR_ID || vendorId == ATI_VENDOR_ID) &&
         !QueryAdapterSupported(curPhysDev.DeviceIds.DeviceID)) {
-      code = ErrorCode::IncompatibleDevice;
-      break;
+      if (!adapter_policy::ShouldAllowUnsupportedAdapter(
+              vendorId, curPhysDev.DeviceIds.DeviceID, hasGfxOverride,
+              enableUnsupportedAdapters)) {
+        code = ErrorCode::IncompatibleDevice;
+        break;
+      }
     }
   }
 

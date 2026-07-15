@@ -77,6 +77,8 @@ public:
             cmdbuf(0),
             cmdbuf_addr(cmdbuf_addr),
             cmdbuf_size(cmdbuf_size),
+            queue_mem(0),
+            queue_addr(0),
             queue_engine(engine),
             use_hws(use_hws),
             prio(thunk_proxy::kNormal) {

@@ -1,162 +1,126 @@
-# AMD ROCDXG Libary
-A user-mode library that enables ROCm functionality on Windows Subsystem for Linux (WSL). This library allows users to run GPU-accelerated Linux workloads under WSL, supporting AI, HPC, and other experimental use cases.
+# librocdxg RDNA2 Extension
 
-## Prerequisites
-- Download the compatible Windows driver from [AMD Drivers](https://www.amd.com/en/support/download/drivers.html)
-- Download and install the latest stable version of WSL2 [WSL Install](https://learn.microsoft.com/en-us/windows/wsl/install)
-- The following tools are required to build librocdxg:
-  - CMake >= 3.15
-  - GCC >= 11.4
-## Quickstart
+An experimental fork of
+[ROCm/librocdxg](https://github.com/ROCm/librocdxg).
 
-### 1. Install AMD ROCm package
+This repository adapts librocdxg for use with selected RDNA2 systems under
+WSL2 and includes entries for additional RDNA2 PCI IDs.
 
-Install the ROCm package by following the official ROCm Installation Quick Guide:
+This work was inspired by a fork of an earlier librocdxg commit:
+[joshEng1/librocdxg-gfx1032fix](https://github.com/joshEng1/librocdxg-gfx1032fix).
 
-[ROCm Installation Quick Start](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html)
+It is not a standalone runtime. It builds and installs librocdxg with these
+extra compatibility changes while relying on the normal ROCm stack, Windows
+driver, and WSL environment.
 
-> ***Note***
-> - This step may take several minutes, depending on internet connection and system speed.
-> - Follow the quick-start guide for package repository setup and ROCm package installation.
-> - **Important**: Post-installation validation (Step 3) must only be performed after the successful completion of **Step 2**. Executing the validation prior to this will lead to failure.
+## Why this fork exists
 
-### 2. Install librocdxg
+RDNA2 is not included in upstream librocdxg's published WSL compatibility
+matrix. Some RDNA2 configurations can work with additional device information,
+gfx-version override handling, and queue-related changes.
 
-> ***Note***
-> - For legacy ROCm releases, `HSA_ENABLE_DXG_DETECTION=1` MUST be set; this requirement is removed starting with the ROCk release 7.13. It applies to both installation options below.
->
->   ```bash
->   export HSA_ENABLE_DXG_DETECTION=1
->   ```
+This repository is mainly intended for experimentation with the listed devices
+and for the Ollama setup described below.
 
-#### Option A — Build from source
+## RDNA2 coverage
 
-1. Install Windows SDK
+The fork currently contains entries for:
 
-Download and install the Windows SDK from [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/).
+| Family | Native ISA | PCI IDs | GPU models associated with these IDs |
+| --- | --- | --- | --- |
+| Navi 21 | gfx1030 | `73BF`, `73AF`, `73A5` | RX 6800, RX 6800 XT, RX 6900 XT, RX 6950 XT |
+| Navi 22 | gfx1031 | `73DF` | RX 6700, RX 6700 XT, RX 6750 XT, RX 6800M, RX 6850M XT |
+| Navi 23 | gfx1032 | `73E3`, `73EF`, `73FF` | Radeon PRO W6600, RX 6600, RX 6600 XT, RX 6600M, RX 6650 XT, RX 6700S, RX 6800S |
+| Navi 24 | gfx1034 | `743F`, `7424` | RX 6300, RX 6400, RX 6500 XT, RX 6500M |
 
-2. Clone the librocdxg repository to your local WSL.
+Several products share PCI IDs, so an entry does not guarantee identical
+behavior across every card using that ID. The table describes what the fork
+recognizes; it is not an official support list.
+
+## Install
+
+First install ROCm and its normal WSL prerequisites using AMD's
+[ROCm installation guide](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html).
+You also need WSL2, a compatible AMD Windows driver, CMake, GCC, and the Windows
+SDK.
+
+Clone and build this fork inside WSL:
 
 ```bash
-git clone https://github.com/ROCm/librocdxg.git
-cd librocdxg
-```
+git clone https://github.com/the-zucc/librocdxg-rdna2.git
+cd librocdxg-rdna2
 
-3. Build and install librocdxg.
-
-```bash
-# Set the Windows SDK path (adjust version number if different)
+# Adjust the SDK version if necessary.
 export win_sdk='/mnt/c/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0'
 
-# Build the library
 mkdir -p build
 cd build
 cmake .. -DWIN_SDK="${win_sdk}/shared"
-make
+make -j"$(nproc)"
 sudo make install
 ```
 
-> ***Note***
-> - The Windows SDK path may vary depending on the version you installed. Common locations include:
->   - C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\
-> - Ensure you have the necessary permissions to access the Windows SDK directory from WSL
+The fork installs librocdxg into the existing ROCm prefix, replacing the
+installed librocdxg library while continuing to use the rest of the upstream
+ROCm stack.
 
-#### Option B — Install pre-built deb package
+## Enable and verify RDNA2
 
-Download the `rocdxg-roct` runtime package from [GitHub Releases](https://github.com/ROCm/librocdxg/releases):
-
-```bash
-sudo dpkg -i rocdxg-roct_<version>_amd64.deb
-```
-
-### 3. Post-install verification checks
-Run these post-installation checks to verify that the installation is complete.
-
-Check if the GPU is listed as an agent:
+Set the environment used for the tested RDNA2 setup. The gfx override makes the
+device appear as gfx1030 to the ROCm runtime:
 
 ```bash
+export HSA_ENABLE_DXG_DETECTION=1
+export HSA_OVERRIDE_GFX_VERSION=10.3.0
+export HSA_ENABLE_SDMA=0
+export HSA_ENABLE_PEER_SDMA=0
+export LIBROCDXG_ALLOC_USER_QUEUE_FROM_UMD=1
+
 rocminfo
 ```
 
-Expected result:
+A working adapter should appear as a GPU agent. For example, the Navi 22 test
+system used for this fork reports:
 
-```bash
-[...]
-*******
-Agent 2
-*******
-  Name:                    gfx1100
-  Marketing Name:          Radeon RX 7900 XTX
-  Vendor Name:             AMD
-  [...]
-[...]
-
+```text
+Name:                    gfx1030
+Marketing Name:          AMD Radeon RX 6700 XT
+Chip ID:                 29663(0x73df)
+Compute Unit:            40
 ```
 
-### 4. Container Launch – WSL-Specific Flags
+These settings are included because they were used with the working setup.
+Other combinations may also work, but have not been validated here.
 
-When you launch the container, add these WSL-specific arguments (they do not replace the native-Linux GPU flags):
+## Ollama
 
-| Flag | Purpose |
-| ---- | ------- |
-| `--device /dev/dxg` | Pass the `/dev/dxg` device node into the container so applications inside the container can access the GPU. |
-| `-v /usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so`<br>`-v /opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so`<br>`-v /opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf` | Make the AMD ROCDXG and Microsoft DXCore libraries available inside the container so that ROCm/HIP applications can route their GPU compute calls through ROCDXG and DXCore to communicate with the GPU. |
-| `-e HSA_ENABLE_DXG_DETECTION=1` | For legacy ROCm releases, HSA_ENABLE_DXG_DETECTION=1 MUST be set; this requirement is removed starting with the ROCk release 7.13. |
+Create an Ollama service override with `sudo systemctl edit ollama`:
 
-Example docker run command:
-
-```bash
-docker run -it  \
-    -v /usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so \
-    -v /opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so \
-    -v /opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf \
-    --device=/dev/dxg \
-    --cap-add=SYS_PTRACE \
-    --security-opt seccomp=unconfined \
-    --ipc=host \
-    --shm-size 8G \
-    rocm/pytorch:latest
+```systemd
+[Service]
+Environment="HSA_ENABLE_DXG_DETECTION=1"
+Environment="HSA_OVERRIDE_GFX_VERSION=10.3.0"
+Environment="HSA_ENABLE_SDMA=0"
+Environment="HSA_ENABLE_PEER_SDMA=0"
+Environment="LIBROCDXG_ALLOC_USER_QUEUE_FROM_UMD=1"
+Environment="OLLAMA_FLASH_ATTENTION=1"
 ```
 
-> ***Note***
-> - For ROCm releases prior to 7.13, pass `-e HSA_ENABLE_DXG_DETECTION=1` to the `docker run` command:
->
->   ```bash
->   docker run -it  \
->       -v /usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so \
->       -v /opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so \
->       -v /opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf \
->       -e HSA_ENABLE_DXG_DETECTION=1 \
->       --device=/dev/dxg \
->       --cap-add=SYS_PTRACE \
->       --security-opt seccomp=unconfined \
->       --ipc=host \
->       --shm-size 8G \
->       rocm/pytorch:latest
->   ```
+Apply it with:
 
-## Known Issues and Limitations
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
 
-- JAX is supported from version 0.9.1 onwards.
-- AMD-SMI currently provides a limited set of features on WSL2. The source code is available in the develop branch, and a formal release plan is under development.
-- Debugging/Profiling: `ROCm-profiler`, `Debugger` are not supported.
-- vLLM can fail during initialization on WSL2 when using the V2 model runner because pinned memory is disabled by default under WSL, while the V2 runner requires pinned memory/UVA support. This may result in errors such as `RuntimeError: UVA is not available`. The issue is addressed by the vLLM fix in [vLLM PR #41496](https://github.com/vllm-project/vllm/pull/41496).
+## Project scope
 
-## WSL Compatibility Matrix
-- Windows 11
-- Ubuntu 26.04 LTS / Ubuntu 24.04 LTS / Ubuntu 22.04 LTS
-- The AMD ROCDXG library utilizes a ROCm runtime feature introduced in ROCm 7.1, which loads ***librocdxg*** to enable ROCm functionality within the WSL environment. This design keeps the ***librocdxg*** solution loosely coupled with both AMD ROCm release and Windows display driver. As a result, the AMD ROCDXG library can evolve independently, following its own development schedule without impacting the existing ROCm solution.
+The goal is to keep this RDNA2 experiment usable as upstream librocdxg evolves.
+For general librocdxg usage, releases, and official compatibility information,
+see the
+[upstream repository](https://github.com/ROCm/librocdxg) for those details.
 
-| AMD Rocdxg Lib Version | AMD ROCm Version | AMD Windows Driver Version | Supported AMD GPU Products |
-| ---------------------- | ---------------- | -------------------------- | -------------------------- |
-| 1.2.1                  | 7.14             | AMD Windows x86 drivers<br>can be directly downloaded<br>from [AMD Driver](https://www.amd.com/en/support/download/drivers.html) | Additional AMD GPU support includes all ASICs for previous versions, plus the following:<br><br>***Ryzen***<br><br>AMD Ryzen™ AI 5 PRO 435<br>AMD Ryzen™ AI 7 445<br>AMD Ryzen™ AI 5 435<br>AMD Ryzen™ AI 5 430<br>AMD Ryzen AI MAX+ PRO 495<br>AMD Ryzen AI MAX PRO 490<br>AMD Ryzen AI MAX PRO 485<br>AMD Ryzen AI Halo |
-| 1.2.0                  | 7.13             | AMD Windows x86 drivers<br>can be directly downloaded<br>from [AMD Driver](https://www.amd.com/en/support/download/drivers.html) | Additional AMD GPU support includes all ASICs for previous versions, plus the following:<br><br>***Ryzen***<br><br>AMD Ryzen AI 7 PRO 360<br>AMD Ryzen AI 7 PRO 350<br>AMD Ryzen AI 5 PRO 340<br>AMD Ryzen AI 7 350<br>AMD Ryzen AI 7 345<br>AMD Ryzen AI 5 340<br>AMD Ryzen AI 5 330 |
-| 1.2.0                  | 7.2.x            | AMD Windows x86 drivers<br>can be directly downloaded<br>from [AMD Driver](https://www.amd.com/en/support/download/drivers.html) | ***Radeon***<br><br>AMD Radeon RX 9070<br>AMD Radeon RX 9070 XT<br>AMD Radeon RX 9070 GRE<br>AMD Radeon AI PRO R9700<br>AMD Radeon RX 9060<br>AMD Radeon RX 9060 XT<br>AMD Radeon RX 7900 XTX<br>AMD Radeon RX 7900 XT<br>AMD Radeon RX 7900 GRE<br>AMD Radeon PRO W7900<br>AMD Radeon PRO W7900 Dual Slot<br>AMD Radeon PRO W7800<br>AMD Radeon PRO W7800 48GB<br>AMD Radeon RX 7800 XT<br>AMD Radeon PRO W7700<br><br>***Ryzen***<br><br>AMD Ryzen AI Max+ 395<br>AMD Ryzen AI Max 390<br>AMD Ryzen AI Max 385<br>AMD Ryzen AI 9 HX 375<br>AMD Ryzen AI 9 HX 370<br>AMD Ryzen AI 9 365 |
-
-
-## Documentation
-
-For detailed documentation—including ROCm installation guides, configuration options, and metric descriptions—see "[Use ROCm on Radeon and Ryzen](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/index.html#)".
-
-## Contributing
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on setting up your WSL environment, building, and submitting pull requests.
+Behavior can vary with the exact GPU, Windows driver, ROCm release, and code
+objects shipped by an application. The RX 6700 XT configuration shown above was
+verified with `rocminfo`; other entries have not all been tested on hardware in
+this repository.
