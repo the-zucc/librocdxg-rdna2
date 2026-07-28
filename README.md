@@ -1,4 +1,4 @@
-# librocdxg RDNA2 Extension
+# librocdxg RDNA2 Patch
 
 An experimental fork of
 [ROCm/librocdxg](https://github.com/ROCm/librocdxg).
